@@ -51,7 +51,7 @@ def main():
         out = open(args.output, mode="w", encoding="utf-8")
     try:
         for _ in range(args.num):
-            print(fpg.generate_passphrase(args.words, sep=' '), file=out)
+            print(fpg.generate_passphrase(sep=' ', num=args.words), file=out)
     finally:
         if out != sys.stdout:
             out.close()

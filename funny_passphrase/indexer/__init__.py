@@ -103,7 +103,7 @@ class CompressedIndexedText(object):
         return self.get_line(rand_line)
     
     @classmethod
-    def IndexTextStream(cls, instream, outfile: str, encoding: str ="utf-8") -> "CompressedIndexer":
+    def IndexTextStream(cls, instream, outfile: str, encoding: str ="utf-8") -> "CompressedIndexedText":
         """
         It is assumed instream is a file-like object
         opened in binary mode
@@ -140,6 +140,6 @@ class CompressedIndexedText(object):
         return cls(cfiles=[outfile],encoding=encoding)
     
     @classmethod
-    def IndexTextFile(cls, infile: str, outfile: str, encoding: str = "utf-8") -> "CompressedIndexer":
+    def IndexTextFile(cls, infile: str, outfile: str, encoding: str = "utf-8") -> "CompressedIndexedText":
         with open(infile, mode="rb") as inpF:
             return cls.IndexTextStream(inpF, outfile, encoding=encoding)

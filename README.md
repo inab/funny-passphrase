@@ -1,6 +1,6 @@
 # funny-passphrase
 
-This is the repository of a library to index text files, and generate
+This is the repository of a library and command line tools to index text files, and generate
 passphrases from sets of them.
 
 ## Passphrase generator
@@ -46,7 +46,7 @@ optional arguments:
   -h, --help  show this help message and exit
 ```
 
-## Usage
+## Command line usage
 
 Usual pattern is indexing at least one text file (for instance, the list
 English adjectives and nouns and Spanish adjectives from Wiktionary),
