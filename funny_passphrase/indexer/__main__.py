@@ -23,24 +23,31 @@ import argparse
 import sys
 from . import CompressedIndexedText
 
-def main():
+
+def main() -> None:
     ap = argparse.ArgumentParser(
         description="Funny passphrase indexer",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     # ap.add_argument('-e','--encoding', dest="encoding", help="Which encoding is expected in ")
-    ap.add_argument('input', help="Input file. If the name is '-', standard input will be used")
-    ap.add_argument('output', help="Output file")
+    ap.add_argument(
+        "input", help="Input file. If the name is '-', standard input will be used"
+    )
+    ap.add_argument("output", help="Output file")
     args = ap.parse_args()
-    
-    print(f"Compressing, indexing and writing all the text contents from {args.input} to {args.output}", file=sys.stderr)
-    
+
+    print(
+        f"Compressing, indexing and writing all the text contents from {args.input} to {args.output}",
+        file=sys.stderr,
+    )
+
     if args.input == "-":
         cit = CompressedIndexedText.IndexTextStream(sys.stdin, args.output)
     else:
         cit = CompressedIndexedText.IndexTextFile(args.input, args.output)
-    
+
     print(f"Number of indexed lines in {args.output}: {cit.num_lines}")
+
 
 if __name__ == "__main__":
     main()

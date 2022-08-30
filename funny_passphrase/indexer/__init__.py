@@ -25,21 +25,25 @@ import shutil
 import tempfile
 
 from typing import (
+    cast,
     Optional,
     Sequence,
+    TextIO,
+    Union,
 )
 
 from typing_extensions import Final
-import xz
+import xz  # type: ignore
+
 
 class CompressedIndexedText(object):
     """
     Compress textual files, generating also a compressed index
     of the starting lines Index textual files
     """
-    
+
     INT_BIN_SIZE: Final[int] = 8
-    
+
     def __init__(self, cfiles: Sequence[str], encoding: str = "utf-8"):
         self.encoding = encoding
         self.cf_l = []
@@ -47,27 +51,29 @@ class CompressedIndexedText(object):
         num_lines = 0
         for cfile in cfiles:
             cF = xz.open(cfile, mode="rb")
-            
+
             # Now, get the number of members
             if len(cF.stream_boundaries) != 2:
                 raise ValueError(f"Unexpected number of members in {cfile}")
-            
+
             f_length = cF.seek(0, io.SEEK_END)
             if (f_length - cF.stream_boundaries[1]) % self.INT_BIN_SIZE:
                 raise ValueError(f"Unexpected mismatch in elements from {cfile}")
             _num_lines = (f_length - cF.stream_boundaries[1]) // self.INT_BIN_SIZE
-            
+
             self.cf_l.append(cF)
             num_lines += _num_lines
             # Limits in number of lines
             self._max_lines_l.append(num_lines)
-        
+
         self._num_lines = num_lines
-    
-    def get_line(self, lineno) -> str:
+
+    def get_line(self, lineno: int) -> str:
         if lineno < 0 or lineno >= self._num_lines:
-            raise ValueError(f"Requested line {lineno} is out of range [0, {self._num_lines})")
-        
+            raise ValueError(
+                f"Requested line {lineno} is out of range [0, {self._num_lines})"
+            )
+
         cF = None
         prev_max = 0
         lineno_effective = lineno
@@ -77,33 +83,40 @@ class CompressedIndexedText(object):
                 lineno_effective = lineno - prev_max
                 break
             prev_max = linemax
-        
+
         if cF is None:
             raise ValueError(f"Corrupted code?")
-        
-        cF.seek(cF.stream_boundaries[1] + lineno_effective*self.INT_BIN_SIZE, io.SEEK_SET)
+
+        cF.seek(
+            cF.stream_boundaries[1] + lineno_effective * self.INT_BIN_SIZE, io.SEEK_SET
+        )
         boffset = cF.read(self.INT_BIN_SIZE)
-        offset = int.from_bytes(boffset, byteorder='big', signed=False)
+        offset = int.from_bytes(boffset, byteorder="big", signed=False)
         if offset >= cF.stream_boundaries[1]:
             raise ValueError(f"Corrupted index")
-        
+
         # Seek the pos
         cF.seek(offset, io.SEEK_SET)
-        
+
         # And return the line, translated to the encoding
-        line = cF.readline().decode(self.encoding).rstrip()
+        line: str = cF.readline().decode(self.encoding).rstrip()
         return line
-    
+
     @property
     def num_lines(self) -> int:
         return self._num_lines
-    
+
     def get_random_line(self) -> str:
         rand_line = random.randint(0, self._num_lines - 1)
         return self.get_line(rand_line)
-    
+
     @classmethod
-    def IndexTextStream(cls, instream, outfile: str, encoding: str ="utf-8") -> "CompressedIndexedText":
+    def IndexTextStream(
+        cls,
+        instream: Union[io.IOBase, TextIO],
+        outfile: str,
+        encoding: str = "utf-8",
+    ) -> "CompressedIndexedText":
         """
         It is assumed instream is a file-like object
         opened in binary mode
@@ -111,35 +124,56 @@ class CompressedIndexedText(object):
         returning bytes and tell method
         in order to read line by line
         """
-        
-        with xz.open(outfile, mode="wb") as output, tempfile.SpooledTemporaryFile(max_size=1024*1024) as output_idx:
-            #posarr = []
+
+        trans_to_bytes = isinstance(instream, io.TextIOBase)
+
+        with xz.open(outfile, mode="wb") as output, tempfile.SpooledTemporaryFile(
+            max_size=1024 * 1024
+        ) as output_idx:
+            # posarr = []
             pos = instream.tell()
-            bline = instream.readline()
+            line = instream.readline()
+            bline: bytes
+            if trans_to_bytes:
+                assert isinstance(line, str)
+                bline = line.encode(encoding)
+            else:
+                assert isinstance(line, bytes)
+                bline = line
             # First, write the lines taking note of the offsets
-            lastb = b''
+            lastb = b""
             while len(bline) > 0:
-                lastb = bline[-1]
+                lastb = bline[-1:]
                 output.write(bline)
-                #posarr.append(pos)
-                output_idx.write((pos).to_bytes(cls.INT_BIN_SIZE, byteorder='big', signed=False))
+                # posarr.append(pos)
+                output_idx.write(
+                    (pos).to_bytes(cls.INT_BIN_SIZE, byteorder="big", signed=False)
+                )
                 pos = instream.tell()
-                bline = instream.readline()
-            
+                line = instream.readline()
+                if trans_to_bytes:
+                    assert isinstance(line, str)
+                    bline = line.encode(encoding)
+                else:
+                    assert isinstance(line, bytes)
+                    bline = line
+
             # This is needed to avoid corner cases
-            if lastb != b'\n':
-                output.write(b'\n')
-            
+            if lastb != b"\n":
+                output.write(b"\n")
+
             # Now, write the index in a separate stream
             output.change_stream()
             output_idx.seek(0, io.SEEK_SET)
             shutil.copyfileobj(output_idx, output)
-            #for pos in posarr:
+            # for pos in posarr:
             #    output.write((pos).to_bytes(cls.INT_BIN_SIZE, byteorder='big', signed=False))
-        
-        return cls(cfiles=[outfile],encoding=encoding)
-    
+
+        return cls(cfiles=[outfile], encoding=encoding)
+
     @classmethod
-    def IndexTextFile(cls, infile: str, outfile: str, encoding: str = "utf-8") -> "CompressedIndexedText":
+    def IndexTextFile(
+        cls, infile: str, outfile: str, encoding: str = "utf-8"
+    ) -> "CompressedIndexedText":
         with open(infile, mode="rb") as inpF:
             return cls.IndexTextStream(inpF, outfile, encoding=encoding)
