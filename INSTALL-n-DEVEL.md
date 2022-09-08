@@ -21,6 +21,12 @@ The pre-commit development hook which runs these tools before any commit is inst
 pre-commit install
 ```
 
+If you want to explicitly run the hooks at any moment, even before doing the commit itself, you only have to run:
+
+```bash
+pre-commit run -a
+```
+
 As these checks are applied only to the python version currently being used in the development,
 there is a GitHub workflow at [.github/workflows/pre-commit.yml](.github/workflows/pre-commit.yml)
 which runs them on several Python versions.
