@@ -19,6 +19,8 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+import gzip
+import bz2
 import io
 import random
 import shutil
@@ -32,8 +34,16 @@ from typing import (
     Union,
 )
 
+import magic  # type: ignore
 from typing_extensions import Final
 import xz  # type: ignore
+
+# Handling different mime types
+MimeOpener = {
+    "application/gzip": gzip.open,
+    "application/x-bzip2": bz2.open,
+    "application/x-xz": xz.open,
+}
 
 
 class CompressedIndexedText(object):
@@ -116,6 +126,8 @@ class CompressedIndexedText(object):
         instream: Union[io.IOBase, TextIO],
         outfile: str,
         encoding: str = "utf-8",
+        substart: int = 0,
+        subend: Optional[int] = None,
     ) -> "CompressedIndexedText":
         """
         It is assumed instream is a file-like object
@@ -126,41 +138,47 @@ class CompressedIndexedText(object):
         """
 
         trans_to_bytes = isinstance(instream, io.TextIOBase)
-
         with xz.open(outfile, mode="wb") as output, tempfile.SpooledTemporaryFile(
             max_size=1024 * 1024
         ) as output_idx:
             # posarr = []
-            pos = instream.tell()
-            line = instream.readline()
-            bline: bytes
-            if trans_to_bytes:
-                assert isinstance(line, str)
-                bline = line.encode(encoding)
-            else:
-                assert isinstance(line, bytes)
-                bline = line
             # First, write the lines taking note of the offsets
-            lastb = b""
-            while len(bline) > 0:
-                lastb = bline[-1:]
-                output.write(bline)
+            len_line = 1
+            pos = 0
+            while len_line > 0:
+                line = instream.readline()
+                if len(line) == 0:
+                    break
+
+                bline: bytes
+                if trans_to_bytes:
+                    assert isinstance(line, str)
+                    bline = line[substart:subend].encode(encoding)
+                else:
+                    assert isinstance(line, bytes)
+                    bline = line[substart:subend]
+
+                # Store the position
                 # posarr.append(pos)
                 output_idx.write(
                     (pos).to_bytes(cls.INT_BIN_SIZE, byteorder="big", signed=False)
                 )
-                pos = instream.tell()
-                line = instream.readline()
-                if trans_to_bytes:
-                    assert isinstance(line, str)
-                    bline = line.encode(encoding)
-                else:
-                    assert isinstance(line, bytes)
-                    bline = line
 
-            # This is needed to avoid corner cases
-            if lastb != b"\n":
-                output.write(b"\n")
+                len_bline = len(bline)
+                do_println = False
+                if len_bline > 0:
+                    output.write(bline)
+                    pos += len_bline
+
+                    # This is needed to avoid corner cases
+                    lastb = bline[-1:]
+                    do_println = lastb != b"\n"
+                else:
+                    do_println = True
+
+                if do_println:
+                    output.write(b"\n")
+                    pos += 1
 
             # Now, write the index in a separate stream
             output.change_stream()
@@ -173,7 +191,15 @@ class CompressedIndexedText(object):
 
     @classmethod
     def IndexTextFile(
-        cls, infile: str, outfile: str, encoding: str = "utf-8"
+        cls,
+        infile: str,
+        outfile: str,
+        encoding: str = "utf-8",
+        substart: int = 0,
+        subend: Optional[int] = None,
     ) -> "CompressedIndexedText":
-        with open(infile, mode="rb") as inpF:
-            return cls.IndexTextStream(inpF, outfile, encoding=encoding)
+        opener = MimeOpener.get(magic.from_file(infile, mime=True), open)
+        with opener(infile, mode="rb") as inpF:
+            return cls.IndexTextStream(
+                inpF, outfile, encoding=encoding, substart=substart, subend=subend
+            )
