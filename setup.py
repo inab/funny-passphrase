@@ -61,6 +61,7 @@ setuptools.setup(
     url="https://github.com/inab/funny-passphrase",
     project_urls={"Bug Tracker": "https://github.com/inab/funny-passphrase/issues"},
     packages=setuptools.find_packages(),
+    package_data={"funny_passphrase": ["py.typed"]},
     install_requires=requirements,
     entry_points={
         "console_scripts": [
